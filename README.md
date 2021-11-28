@@ -1,4 +1,4 @@
-# Simple toolkit to decode Iridium signals
+# Simple toolkit to decode Iridium signals modified for MacOS
 
 ### Requisites
 
