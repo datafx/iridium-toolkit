@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 # vim: set ts=4 sw=4 tw=0 et pm=:
 
 import reedsolo6
@@ -22,7 +22,7 @@ def rs_check(data):
 def rs_fix(data):
 #	data=data+bytearray([0]*elen)
 	data=data+([0]*elen)
-	r=range(len(data)-elen,len(data))
+	r=list(range(len(data)-elen,len(data)))
 	try:
 		(cmsg,crs)=reedsolo6.rs_correct_msg(data,nsym+elen,fcr,generator,r)
 	except reedsolo6.ReedSolomonError:

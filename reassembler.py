@@ -44,7 +44,7 @@ for opt, arg in options:
             args[a]=True
     elif opt in ('-h', '--help'):
         print("Usage:", file=sys.stderr)
-        print("\t",os.path.basename(sys.argv[0]),"[-v] [--input foo.parsed] --mode [ida|idapp|lap|sbd|page|msg|stats-pkt|ppm] [--args option[,...]] [--output out.txt]", file=sys.stderr)
+        print("\t",os.path.basename(sys.argv[0]),"[-v] [--input foo.parsed] --mode [ida|idapp|lap|sbd|page|msg|stats-pkt|ppm|satmap] [--args option[,...]] [--output out.txt]", file=sys.stderr)
         exit(1)
     else:
         raise Exception("unknown argument?")
@@ -58,8 +58,8 @@ if ifile == None:
         ifile = remainder[0]
 
 if not basename:
-    basename=re.sub('\.[^.]*$','',ifile)
-#    basename=os.path.basename(re.sub('\.[^.]*$','',ifile))
+    basename=re.sub(r'\.[^.]*$','',ifile)
+#    basename=os.path.basename(re.sub(r'\.[^.]*$','',ifile))
 
 if ofile == None:
     ofile="/dev/stdout"
@@ -208,7 +208,7 @@ class StatsSNR(Reassemble):
         pass
 
     def filter(self,line):
-        q=super(StatsSNR,self).filter(line)
+        q=super().filter(line)
 
         if q==None: return None
         if q.typ[3]!=":": return None
@@ -310,7 +310,7 @@ class LivePktStats(Reassemble):
         pass
 
     def filter(self,line):
-        q=super(LivePktStats,self).filter(line)
+        q=super().filter(line)
 
         if q==None: return None
         if q.typ[3]!=":": return None
@@ -392,10 +392,10 @@ class LiveMap(Reassemble):
         self.ground={}
         pass
 
-    r2=re.compile(' *sat:(\d+) beam:(\d+) (?:rps=\S+ )?pos=.([+-][0-9.]+)\/([+-][0-9.]+). alt=(-?\d+).*')
+    r2=re.compile(r' *sat:(\d+) beam:(\d+) (?:xyz=\S+ )?pos=.([+-][0-9.]+)\/([+-][0-9.]+). alt=(-?\d+).*')
 
     def filter(self,line):
-        q=super(LiveMap,self).filter(line)
+        q=super().filter(line)
 
         if q==None: return None
         if q.typ!="IRA:": return None
@@ -491,11 +491,11 @@ class ReassemblePPM(Reassemble):
         self.idx=None
         pass
 
-    r1=re.compile('.* slot:(\d)')
-    r2=re.compile('.* time:([0-9:T-]+(\.\d+)?)Z')
+    r1=re.compile(r'.* slot:(\d)')
+    r2=re.compile(r'.* time:([0-9:T-]+(\.\d+)?)Z')
 
     def filter(self,line):
-        q=super(ReassemblePPM,self).filter(line)
+        q=super().filter(line)
         if q==None: return None
         if q.typ!="IBC:": return None
 
@@ -605,15 +605,15 @@ class ReassembleIDA(Reassemble):
     def __init__(self):
         pass
     def filter(self,line):
-        q=super(ReassembleIDA,self).filter(line)
+        q=super().filter(line)
         if q==None: return None
         if q.typ!="IDA:": return None
 
-        qqq=re.compile('.* CRC:OK')
+        qqq=re.compile(r'.* CRC:OK')
         if not qqq.match(q.data):
             return None
 
-        p=re.compile('.* cont=(\d) (\d) ctr=(\d+) \d+ len=(\d+) 0:.000 \[([0-9a-f.!]*)\]\s+..../.... CRC:OK')
+        p=re.compile(r'.* cont=(\d) (\d) ctr=(\d+) \d+ len=(\d+) 0:.000 \[([0-9a-f.!]*)\]\s+..../.... CRC:OK')
         m=p.match(q.data)
         if(not m):
             print("Couldn't parse IDA: ",q.data, file=sys.stderr)
@@ -697,7 +697,7 @@ class ReassembleIDA(Reassemble):
                 #could be put into assembled if long enough to be interesting?
                 break
     def end(self):
-        super(ReassembleIDA,self).end()
+        super().end()
         print("%d valid packets assembled from %d fragments (1:%1.2f)."%(self.stat_ok,self.stat_fragments,((float)(self.stat_fragments)/(self.stat_ok or 1))))
         print("%d/%d (%3.1f%%) broken fragments."%(self.stat_broken,self.stat_fragments,(100.0*self.stat_broken/(self.stat_fragments or 1))))
         print("%d dupes removed."%(self.stat_dupes))
@@ -1232,22 +1232,24 @@ class ReassembleIRA(Reassemble):
     def __init__(self):
         pass
     def filter(self,line):
-        q=super(ReassembleIRA,self).filter(line)
+        q=super().filter(line)
         if q==None: return None
         if q.typ=="IRA:":
-            p=re.compile('sat:(\d+) beam:(\d+) (?:aps=\S+ )?pos=\(([+-][0-9.]+)/([+-][0-9.]+)\) alt=(-?[0-9]+) .* bc_sb:\d+(?: (.*))?')
+            p=re.compile(r'sat:(\d+) beam:(\d+) (?:(?:aps|xyz)=\(([+-]?[0-9]+),([+-]?[0-9]+),([+-]?[0-9]+)\) )?pos=\(([+-][0-9.]+)/([+-][0-9.]+)\) alt=(-?[0-9]+) .* bc_sb:\d+(?: (.*))?')
             m=p.search(q.data)
             if(not m):
                 print("Couldn't parse IRA: ",q.data, end=' ', file=sys.stderr)
             else:
                 q.sat=  int(m.group(1))
                 q.beam= int(m.group(2))
-                q.lat=float(m.group(3))
-                q.lon=float(m.group(4))
-                q.alt=  int(m.group(5))
-                if m.group(6) is not None:
-                    p=re.compile('PAGE\(tmsi:([0-9a-f]+) msc_id:([0-9]+)\)')
-                    q.pages=p.findall(m.group(6))
+                if m.group(3) is not None:
+                    q.xyz= [4*int(m.group(3)), 4*int(m.group(4)), 4*int(m.group(5))]
+                q.lat=float(m.group(6))
+                q.lon=float(m.group(7))
+                q.alt=  int(m.group(8))
+                if m.group(9) is not None:
+                    p=re.compile(r'PAGE\(tmsi:([0-9a-f]+) msc_id:([0-9]+)\)')
+                    q.pages=p.findall(m.group(9))
                 else: # Won't be printed, but just in case
                     q.pages=[]
                 return q
@@ -1257,14 +1259,126 @@ class ReassembleIRA(Reassemble):
     def consume(self,q):
         print(q, file=outfile)
 
+
+class InfoIRAMAP(ReassembleIRA):
+    satlist=None
+    sats={}
+    ts=None
+    first=True
+    MAX_DIST=100 # Maximum distance in km for a match to be accepted
+    stats_cnt=0
+    stats_sum=0
+
+    def __init__(self):
+        filename="tracking/iridium-NEXT.txt"
+        self.satlist = load.tle_file(filename)
+        if verbose:
+            print(("%i satellites loaded into list"%len(self.satlist)))
+        self.epoc = self.satlist[0].epoch
+        self.ts=load.timescale(builtin=True)
+
+        if verbose:
+            tnow = self.ts.utc(datetime.datetime.now(datetime.timezone.utc))
+            days = tnow - self.epoc
+            print('TLE file is %.2f days old'%days)
+
+    def filter(self,line):
+        q=super().filter(line)
+        if q is None: return None
+        if q.alt < 100: return None
+        q.enrich()
+        return q
+
+    def find_closest_satellite(self, t, xyz, satlist):
+        a = SatrecArray([sat.model for sat in satlist])
+#        jd = np.array([t._utc_float()]) # skyfield 1.2x or so....
+        jd = np.array([t.whole + t.tai_fraction - t._leap_seconds() / DAY_S])
+        e, r, v = a.sgp4(jd, jd * 0.0)
+
+        r = r[:,0,:]  # eliminate t axis since we only have one time
+        v = v[:,0,:]
+        r = r.T       # move x,y,z to top level like Skyfield expects
+        v = v.T
+
+        ut1 = np.array([t.ut1])
+        r, v = TEME_to_ITRF(ut1, r, v)
+
+        r2=np.array(xyz)
+        r2.shape = 3, 1  # add extra dimension to stand in for time
+
+#        sep_a = angle_between(r, r2)
+        sep_d = length_of(r-r2)
+
+        i = np.argmin(sep_d)
+
+        closest_satellite = satlist[i]
+#        closest_angle = sep_a[i] / tau * 360.0
+        closest_distance = sep_d[i]
+
+        if False:
+            print("Position:",xyz,"at",t.utc_strftime(),":")
+            for idx,s in enumerate(sorted(satlist, key=lambda sat: sat.name)):
+                print("  %s: %8.2fkm %s"%(s.name,sep_d[idx],["","*"][i==idx]))
+
+        return closest_satellite, closest_distance
+
+    def process(self,q):
+        time = datetime.datetime.utcfromtimestamp(q.time)
+        time = time.replace(tzinfo=utc)
+        t = self.ts.utc(time)
+        if self.first:
+            self.first=False
+            days = t - self.epoc
+            if abs(days)>3:
+                print('WARNING: TLE relative age is %.2f days. Expect poor results.'%abs(days), file=sys.stderr)
+            elif verbose:
+                print('TLE relative age is %.2f days'%abs(days))
+
+        if "xyz" not in q.__dict__: # Compat for old parsed files
+            alt=int(q.alt)*1000
+            sat= Topos(latitude_degrees=q.lat, longitude_degrees=q.lon, elevation_m=alt)
+            q.xyz= sat.itrf_xyz().km
+
+        (best,sep)=self.find_closest_satellite(t, q.xyz, self.satlist)
+
+        q.name=best.name
+        q.sep=sep
+
+        return [q]
+
+    def consume(self,q):
+        if verbose:
+#            print("%s: sat %02d beam %02d [%d %4.2f %4.2f %s] matched %-20s @ %5.2f°"%( datetime.datetime.utcfromtimestamp(q.time), q.sat,q.beam,q.time,q.lat,q.lon,q.alt,q.name,q.sep))
+            print("%s: sat %02d beam %02d [%d %8.4f %8.4f %s] matched %-20s @ %5fkm"%( datetime.datetime.utcfromtimestamp(q.time), q.sat,q.beam,q.time,q.lat,q.lon,q.alt,q.name,q.sep))
+        if q.sep > self.MAX_DIST:
+            q.name="NONE"
+        if not q.sat in self.sats:
+            self.sats[q.sat]={}
+        if not q.name in self.sats[q.sat]:
+            self.sats[q.sat][q.name]=0
+        self.sats[q.sat][q.name]+=1
+        self.stats_cnt+=1
+        self.stats_sum+=q.sep
+
+    def end(self):
+        for x in sorted(self.sats):
+            sum=0
+            for n in sorted(self.sats[x]):
+                sum+=self.sats[x][n]
+
+            for n in sorted(self.sats[x]):
+                print("%03d seen: %5d times - matched to %-20s %5.1f%%"%(x,sum,n,self.sats[x][n]/float(sum)*100))
+
+        print("%d matches. Avg distance: %5.2fkm"%(self.stats_cnt,self.stats_sum/self.stats_cnt))
+
 class ReassembleMSG(Reassemble):
     def __init__(self):
         pass
     def filter(self,line):
-        q=super(ReassembleMSG,self).filter(line)
+        q=super().filter(line)
         if q == None: return None
         if q.typ == "MSG:":
-            p=re.compile('.* ric:(\d+) fmt:(\d+) seq:(\d+) [01]+ (\d)/(\d) csum:([0-9a-f][0-9a-f]) msg:([0-9a-f]+)\.([01]*) ')
+            p=re.compile(r'.* ric:(\d+) fmt:(\d+) seq:(\d+) [01]+ (\d)/(\d) csum:([0-9a-f][0-9a-f]) msg:([0-9a-f]+)\.([01]*) ')
             m=p.match(q.data)
             if(not m):
                 print("Couldn't parse MSG: ",q.data, file=sys.stderr)
@@ -1284,7 +1398,7 @@ class ReassembleMSG(Reassemble):
                 q.msg_msgdata+=q.msg_brest
 
                 # convert to 7bit thingies 
-                m=re.compile('(\d{7})').findall(q.msg_msgdata)
+                m=re.compile(r'(\d{7})').findall(q.msg_msgdata)
                 q.msg_ascii=""
                 q.msg=[]
                 for (group) in m:
@@ -1300,7 +1414,7 @@ class ReassembleMSG(Reassemble):
                     q.msg_rest=""
                 return q
         if q.typ == "MS3:":
-            p=re.compile('.* ric:(\d+) fmt:(\d+) seq:(\d+) [01]+ \d BCD: ([0-9a-f]+)')
+            p=re.compile(r'.* ric:(\d+) fmt:(\d+) seq:(\d+) [01]+ \d BCD: ([0-9a-f]+)')
             m=p.match(q.data)
             if(not m):
                 print("Couldn't parse MS3: ",q.data, file=sys.stderr)
@@ -1357,13 +1471,13 @@ class ReassembleMSG(Reassemble):
             msg="".join(self.buf[b].msgs[:1+self.buf[b].msg_ctr_max])
             str="Message %s @%s (len:%d)"%(b,datetime.datetime.fromtimestamp(self.buf[b].time).strftime("%Y-%m-%dT%H:%M:%S"),self.buf[b].msg_ctr_max)
             if self.buf[b].fmt==5:
-                msg=re.sub("(\[3\])+$","",msg) # XXX: should be done differently
-                cmsg=re.sub("\[10\]","\n",msg) # XXX: should be done differently
+                msg=re.sub(r"(\[3\])+$","",msg) # XXX: should be done differently
+                cmsg=re.sub(r"\[10\]","\n",msg) # XXX: should be done differently
                 csum=self.messagechecksum(cmsg)
                 str+= " %3d"%self.buf[b].msg_checksum
                 str+= (" fail"," OK  ")[self.buf[b].msg_checksum == csum]
             elif self.buf[b].fmt==3:
-                msg=re.sub("c+$","",msg) # XXX: should be done differently
+                msg=re.sub(r"c+$","",msg) # XXX: should be done differently
                 str+= " BCD"
                 str+= " OK  "
             str+= ": %s"%(msg)
@@ -1388,6 +1502,14 @@ elif mode == "sbd":
     zx=ReassembleIDASBD()
 elif mode == "page":
     zx=ReassembleIRA()
+elif mode == "satmap":
+    from skyfield.api import load, utc, Topos
+    from skyfield.sgp4lib import TEME_to_ITRF
+    from sgp4.api import SatrecArray
+    from skyfield.functions import angle_between, length_of
+    from skyfield.constants import tau, DAY_S
+    import numpy as np
+    zx=InfoIRAMAP()
 elif mode == "msg":
     zx=ReassembleMSG()
 elif mode == "stats-snr":
