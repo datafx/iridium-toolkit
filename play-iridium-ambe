@@ -1,5 +1,10 @@
 #!/bin/sh
 ./bits_to_dfs.py $1 /tmp/voice.dfs
 #ambe -w /tmp/voice.dfs
+<<<<<<< HEAD
 ./ir77_ambe_decode /tmp/voice.dfs /tmp/voice.wav
 mplayer /tmp/voice.wav
+=======
+ir77_ambe_decode /tmp/voice.dfs /tmp/voice.wav
+mplayer -msglevel all=3:statusline=5 -nolirc /tmp/voice.wav
+>>>>>>> 2e3d1aa5bcd6b8fc9bc51fae620442c600d73516

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import sys
 import fileinput
 import datetime
@@ -12,16 +13,18 @@ import interp_circ
 
 debug = False
 tlefile='tracking/iridium-NEXT.txt'
-#tmax=500
-tmax=60
-#tmax=30
+#tmax=500e9
+tmax=60e9
+#tmax=30e9
 ppm = 0
 
 
 # create input file like this:
-# iridium-parser.py -p --filter=IridiumBCMessage+iri_time_ux --format=globaltime,iri_time_ux,slot,sv_id,beam_id iridium.bits > iridium.ibc
-# iridium-parser.py -p --filter=IridiumRAMessage,'q.ra_alt>7100' --format globaltime,ra_sat,ra_cell,ra_alt,ra_pos_x,ra_pos_y,ra_pos_z iridium.bits > iridium.ira
+# iridium-parser.py -p --filter=IridiumBCMessage+iri_time_ux --format=timens,iri_time_ux,slot,sv_id,beam_id iridium.bits > iridium.ibc
+# iridium-parser.py -p --filter=IridiumRAMessage,'q.ra_alt>7100' --format timens,ra_sat,ra_cell,ra_alt,ra_pos_x,ra_pos_y,ra_pos_z iridium.bits > iridium.ira
 
+# call like this:
+# python3 ibc_position_interpolator.py iridium.ibc iridium.ira > iridium.ibc_pos_interp
 class InterpException(Exception):
     pass
 
@@ -77,7 +80,7 @@ def read_ira():
         x = int(x) * 4000
         y = int(y) * 4000
         z = int(z) * 4000
-        tu = float(tu)
+        tu = int(tu)
         #print(ppm)
         #tu = float(tu) * (1-ppm/1e6)
 
@@ -87,7 +90,7 @@ def read_ira():
         #tu -= dist_s
         """
 
-        x, y, z = pymap3d.ecef2eci(x, y, z, datetime.datetime.utcfromtimestamp(tu))
+        x, y, z = pymap3d.ecef2eci(x, y, z, datetime.datetime.utcfromtimestamp(tu/1e9))
         ira_xyzt[s].append([x,y,z,tu])
 
 
@@ -133,7 +136,7 @@ def interp_ira(sat, ts): # (linear) interpolate sat position
     #print("time %f -> %f: Δt: %f"%(to,tn,tn-to))
 
     # refuse to extrapolate
-    if delta > 2000:
+    if delta > 2000e9:
         raise InterpException("Too inaccurate (Δ=%d)"%(delta))
     if ts<to:
         raise InterpException("In the past")
@@ -154,7 +157,7 @@ def interp_ira(sat, ts): # (linear) interpolate sat position
         raise InterpException("Not enough data")
 
     xyz[0], xyz[1], xyz[2] = interp_circ.interp([X, Y, Z], T, ts, debug)
-    xyz[0], xyz[1], xyz[2] = pymap3d.eci2ecef(xyz[0], xyz[1], xyz[2], datetime.datetime.utcfromtimestamp(ts))
+    xyz[0], xyz[1], xyz[2] = pymap3d.eci2ecef(xyz[0], xyz[1], xyz[2], datetime.datetime.utcfromtimestamp(ts/1e9))
     return xyz
 
 
@@ -170,18 +173,22 @@ for line in ibc:
 
     slot=int(slot)
     s=int(s)
-    tu=float(tu)
-    ti=float(ti)
+    tu=int(tu)
+
+    # Iridium timestamps ar in multiples of 90 ms.
+    # First make an integer in ms, then bring it to ns
+    ti=int(float(ti) * 1000) * 10**6
 
     # time correction based on BC slot
+    # 8280 us per frame, 100 us for guard time
     if slot==1:
-        ti+=3 * float(8.28 + 0.1)/1000
+        ti+=3 * (8280 + 100) * 10**3
 
     # ppm correction
     if t0 is None:
         t0=tu
 
-    tu=tu-(tu-t0)*ppm/1e6
+    tu=tu-(tu-t0)*ppm//10**6
 
     xyz = [0,0,0]
     try:
@@ -198,4 +205,4 @@ for line in ibc:
         #print("Warning:",repr(e))
         pass
 
-print(sys.stderr, "Average delay to system time:", numpy.average([y[3] for y in ys]))
+print("Average delay to system time:", numpy.average([y[3] for y in ys]), file=sys.stderr)
